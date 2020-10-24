@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'tickets_component',
     'rest_framework',
+    'django_crontab',
 ]
 
 MIDDLEWARE = [
@@ -114,10 +115,15 @@ USE_I18N = True
 
 USE_L10N = True
 
-USE_TZ = True
+USE_TZ = False
 
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/3.1/howto/static-files/
 
 STATIC_URL = '/static/'
+
+# every 5 minutes get rid of obsolete reservations
+CRONJOBS = [
+    ('*/5 * * * *', 'tickets_component.tasks.remove_obsolete_reservations'),
+]
