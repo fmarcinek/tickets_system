@@ -35,7 +35,7 @@ def event_list_view(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-def ticket_reservations_view(request):
+def user_reservations_view(request):
     trs = TicketReservation.objects.filter(owner=request.user)
     if not trs.exists():
         return Response({}, status=404)
