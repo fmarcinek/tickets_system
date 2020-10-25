@@ -3,12 +3,13 @@ import datetime
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from django.db.models import F, Sum, Count
+from django.db.models import F, Sum
 
 from .models import (
     Event,
     AvailableTicket,
     TicketReservation,
+    PurchasedTicket,
     TICKET_TYPES,
 )
 from .serializers import (
@@ -111,15 +112,15 @@ def payment_view(request):
 
 
 @api_view(['GET'])
-def reserved_tickets_statistics_view(request, type_=None):
+def tickets_statistics_view(request, type_=None, cls=None):
     ticket_types_dict = dict(TICKET_TYPES)
     if type_ in ticket_types_dict.keys():
-        tickets = AvailableTicket.objects.filter(type=type_)
+        tickets = cls.objects.filter(type=type_)
     elif type_ in ticket_types_dict.values():
         type_ = {v: k for k, v in ticket_types_dict.items()}[type_]
-        tickets = AvailableTicket.objects.filter(type=type_)
+        tickets = cls.objects.filter(type=type_)
     else:
-        tickets = AvailableTicket.objects.all()
+        tickets = cls.objects.all()
     tickets_data = tickets.values('event_id', 'type').annotate(quantity=Sum('amount_of_tickets'))
     for dct in tickets_data:
         dct['type'] = ticket_types_dict[dct['type']]
