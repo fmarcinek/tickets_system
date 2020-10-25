@@ -123,7 +123,11 @@ USE_TZ = False
 
 STATIC_URL = '/static/'
 
-# every 5 minutes get rid of obsolete reservations
+# every minute get rid of obsolete reservations
 CRONJOBS = [
-    ('*/5 * * * *', 'tickets_component.tasks.remove_obsolete_reservations'),
+    (
+        '*/1 * * * *',
+        'tickets_component.tasks.remove_obsolete_reservations',
+        '>> ' + str(BASE_DIR / 'removing_obsolete_reservations.log'),
+    ),
 ]
