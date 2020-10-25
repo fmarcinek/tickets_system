@@ -1,7 +1,7 @@
 from rest_framework import serializers
 import datetime
 
-from .models import Event, AvailableTicket, TicketReservation
+from .models import Event, AvailableTicket, TicketReservation, PurchasedTicket
 
 
 class EventSerializer(serializers.ModelSerializer):
@@ -47,3 +47,15 @@ class TicketReservationSerializer(serializers.ModelSerializer):
                 'Amount of tickets and amount to pay do not comply with the price of the ticket.'
             )
         return data
+
+
+class PaymentSerializer(serializers.Serializer):
+    currency = serializers.CharField(max_length=3)
+    amount = serializers.DecimalField(max_digits=10, decimal_places=2)
+    reservations = serializers.ListField(child=serializers.IntegerField())
+
+
+class PurchasedTicketSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PurchasedTicket
+        fields = ['owner', 'ticket', 'amount_of_tickets']

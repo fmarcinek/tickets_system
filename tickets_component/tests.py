@@ -8,6 +8,7 @@ from .models import (
     AvailableTicket,
     Event,
     TicketReservation,
+    PurchasedTicket
 )
 from .tasks import remove_obsolete_reservations
 
@@ -116,3 +117,55 @@ class TicketsComponentTestCase(TransactionTestCase):
         self.ticket_1.refresh_from_db()
         self.assertEqual(available_tickets_amount_before_deleting,
                          self.ticket_1.amount_of_tickets - amount_of_tickets_to_reserve)
+
+    def test_payment_one_reservation(self):
+        client = self.get_client()
+        r1 = TicketReservation.objects.create(
+            owner=self.user, ticket=self.ticket_1, amount_of_tickets=1, amount_to_pay=5.0,
+            expiration_datetime=datetime.datetime.now() + datetime.timedelta(minutes=1)
+        )
+        response = client.post('/api/reservations/payment', {'reservations': [r1.id], 'currency': 'EUR', 'amount': 5.0})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json().get('message'), "Payment succeeded.")
+        self.assertTrue(r1 not in TicketReservation.objects.all())
+        self.assertEqual(len(PurchasedTicket.objects.all()), 1)
+        purchased_ticket = PurchasedTicket.objects.all().first()
+        self.assertEqual(purchased_ticket.owner, r1.owner)
+        self.assertEqual(purchased_ticket.ticket, r1.ticket)
+        self.assertEqual(purchased_ticket.amount_of_tickets, r1.amount_of_tickets)
+
+    def test_payment_two_reservations(self):
+        client = self.get_client()
+        r1 = TicketReservation.objects.create(
+            owner=self.user, ticket=self.ticket_1, amount_of_tickets=1, amount_to_pay=5.0,
+            expiration_datetime=datetime.datetime.now() + datetime.timedelta(minutes=1)
+        )
+        r2 = TicketReservation.objects.create(
+            owner=self.user, ticket=self.ticket_2, amount_of_tickets=2, amount_to_pay=20.0,
+            expiration_datetime=datetime.datetime.now() + datetime.timedelta(minutes=1)
+        )
+        response = client.post('/api/reservations/payment',
+                               {'reservations': [r1.id, r2.id], 'currency': 'EUR', 'amount': 25.0})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json().get('message'), "Payment succeeded.")
+        self.assertTrue(r1 not in TicketReservation.objects.all())
+        self.assertTrue(r2 not in TicketReservation.objects.all())
+        self.assertEqual(len(PurchasedTicket.objects.all()), 2)
+        purchased_tickets = PurchasedTicket.objects.all()
+        self.assertEqual({t.ticket.id for t in purchased_tickets}, {self.ticket_1.id, self.ticket_2.id})
+
+    def test_fail_payment_wrong_amount_of_money(self):
+        client = self.get_client()
+        r1 = TicketReservation.objects.create(
+            owner=self.user, ticket=self.ticket_1, amount_of_tickets=1, amount_to_pay=5.0,
+            expiration_datetime=datetime.datetime.now() + datetime.timedelta(minutes=1)
+        )
+        response = client.post('/api/reservations/payment', {'reservations': [r1.id], 'currency': 'EUR', 'amount': 4.0})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json().get('message'), 'Wrong amount of money for this payment request.')
+
+    def test_fail_payment_nonexistent_reservation(self):
+        client = self.get_client()
+        response = client.post('/api/reservations/payment', {'reservations': [1], 'currency': 'EUR', 'amount': 4.0})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json().get('message'), 'Reservation does not exist or expired.')
