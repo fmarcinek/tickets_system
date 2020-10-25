@@ -7,7 +7,9 @@ from django.contrib.auth import get_user_model
 from .models import (
     AvailableTicket,
     Event,
+    TicketReservation,
 )
+from .tasks import remove_obsolete_reservations
 
 User = get_user_model()
 
@@ -65,3 +67,52 @@ class TicketsComponentTestCase(TransactionTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.json()), 2)
         self.assertEqual({el.get('id') for el in response.json()}, {self.ticket_2.id, self.ticket_3.id})
+
+    def test_create_reservation(self):
+        now_before_creating = datetime.datetime.now()
+        initial_amount_of_available_tickets = self.ticket_1.amount_of_tickets
+        amount_of_tickets_to_buy = 2
+
+        client = self.get_client()
+        response = client.post('/api/event/1/reserve_ticket', {
+            'ticket': self.ticket_1.id,
+            'amount_of_tickets': amount_of_tickets_to_buy
+        })
+        # it's important to refresh updated object!
+        self.ticket_1.refresh_from_db()
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(len(TicketReservation.objects.all()), 1)
+        reservation = TicketReservation.objects.all().first()
+        self.assertEqual(reservation.owner, self.user)
+        self.assertEqual(reservation.ticket, self.ticket_1)
+        self.assertEqual(initial_amount_of_available_tickets,
+                         self.ticket_1.amount_of_tickets + amount_of_tickets_to_buy)
+        self.assertGreater(reservation.expiration_datetime, now_before_creating + datetime.timedelta(minutes=15))
+        self.assertLess(reservation.expiration_datetime, now_before_creating + datetime.timedelta(minutes=16))
+
+    def test_get_user_reservations(self):
+        client = self.get_client()
+        r1 = TicketReservation.objects.create(owner=self.user, ticket=self.ticket_1, amount_of_tickets=1,
+                                              amount_to_pay=5.0, expiration_datetime=datetime.datetime.now())
+        r2 = TicketReservation.objects.create(owner=self.user, ticket=self.ticket_2, amount_of_tickets=1,
+                                              amount_to_pay=10.0, expiration_datetime=datetime.datetime.now())
+        r3 = TicketReservation.objects.create(owner=self.user_2, ticket=self.ticket_1, amount_of_tickets=1,
+                                              amount_to_pay=5.0, expiration_datetime=datetime.datetime.now())
+        response = client.get('/api/reservations/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.json()), 2)
+        self.assertEqual({el.get('id') for el in response.json()}, {r1.id, r2.id})
+
+    def test_remove_obsolete_reservation(self):
+        amount_of_tickets_to_reserve = 2
+        r1 = TicketReservation.objects.create(owner=self.user, ticket=self.ticket_1,
+                                              amount_of_tickets=amount_of_tickets_to_reserve,
+                                              amount_to_pay=5.0, expiration_datetime=datetime.datetime.now())
+        self.assertTrue(r1 in TicketReservation.objects.all())
+        available_tickets_amount_before_deleting = self.ticket_1.amount_of_tickets
+        remove_obsolete_reservations()
+        self.assertTrue(r1 not in TicketReservation.objects.all())
+        self.ticket_1.refresh_from_db()
+        self.assertEqual(available_tickets_amount_before_deleting,
+                         self.ticket_1.amount_of_tickets - amount_of_tickets_to_reserve)
