@@ -2,6 +2,11 @@ from django.db import models
 from django.conf import settings
 
 User = settings.AUTH_USER_MODEL
+TICKET_TYPES = [
+    ('r', 'regular'),
+    ('p', 'premium'),
+    ('V', 'VIP')
+]
 
 
 class Event(models.Model):
@@ -12,7 +17,7 @@ class Event(models.Model):
 class AvailableTicket(models.Model):
     event = models.ForeignKey(Event, on_delete=models.CASCADE)
     amount_of_tickets = models.IntegerField()
-    type = models.CharField(choices=[('r', 'regular'), ('p', 'premium'), ('V', 'VIP')], max_length=1)
+    type = models.CharField(choices=TICKET_TYPES, max_length=1)
     price = models.DecimalField(max_digits=6, decimal_places=2)
 
 

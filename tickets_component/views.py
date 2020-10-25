@@ -3,9 +3,14 @@ import datetime
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from django.db.models import F, Sum
+from django.db.models import F, Sum, Count
 
-from .models import Event, AvailableTicket, TicketReservation, PurchasedTicket
+from .models import (
+    Event,
+    AvailableTicket,
+    TicketReservation,
+    TICKET_TYPES,
+)
 from .serializers import (
     EventSerializer,
     AvailableTicketSerializer,
@@ -103,3 +108,19 @@ def payment_view(request):
                     reservations.delete()
                     return Response({'message': 'Payment succeeded.'}, status=200)
     return Response({}, status=400)
+
+
+@api_view(['GET'])
+def reserved_tickets_statistics_view(request, type_=None):
+    ticket_types_dict = dict(TICKET_TYPES)
+    if type_ in ticket_types_dict.keys():
+        tickets = AvailableTicket.objects.filter(type=type_)
+    elif type_ in ticket_types_dict.values():
+        type_ = {v: k for k, v in ticket_types_dict.items()}[type_]
+        tickets = AvailableTicket.objects.filter(type=type_)
+    else:
+        tickets = AvailableTicket.objects.all()
+    tickets_data = tickets.values('event_id', 'type').annotate(quantity=Sum('amount_of_tickets'))
+    for dct in tickets_data:
+        dct['type'] = ticket_types_dict[dct['type']]
+    return Response(tickets_data)

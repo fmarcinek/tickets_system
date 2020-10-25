@@ -24,13 +24,13 @@ class TicketsComponentTestCase(TransactionTestCase):
         self.event_1 = Event.objects.create(name='festival', datetime=datetime.datetime.now())
         self.event_2 = Event.objects.create(name='festival 2', datetime=datetime.datetime.now())
         self.ticket_1 = AvailableTicket.objects.create(
-            event=self.event_1, amount_of_tickets=3, price=5.0, type='regular'
+            event=self.event_1, amount_of_tickets=3, price=5.0, type='r'
         )
         self.ticket_2 = AvailableTicket.objects.create(
-            event=self.event_2, amount_of_tickets=3, price=10.0, type='VIP'
+            event=self.event_2, amount_of_tickets=3, price=10.0, type='V'
         )
         self.ticket_3 = AvailableTicket.objects.create(
-            event=self.event_2, amount_of_tickets=1, price=6.0, type='premium'
+            event=self.event_2, amount_of_tickets=1, price=6.0, type='p'
         )
 
     def get_client(self):
@@ -169,3 +169,21 @@ class TicketsComponentTestCase(TransactionTestCase):
         response = client.post('/api/reservations/payment', {'reservations': [1], 'currency': 'EUR', 'amount': 4.0})
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json().get('message'), 'Reservation does not exist or expired.')
+
+    def test_statistics_reserved_tickets_all_types(self):
+        client = self.get_client()
+        response = client.get('/api/statistics/reserved_tickets/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual({tuple((k, v) for k, v in r.items()) for r in response.json()}, {tuple(r) for r in [
+            (('event_id', 1), ('type', 'regular'), ('quantity', 3)),
+            (('event_id', 2), ('type', 'premium'), ('quantity', 1)),
+            (('event_id', 2), ('type', 'VIP'), ('quantity', 3)),
+        ]})
+
+    def test_statistics_reserved_tickets_for_certain_type(self):
+        client = self.get_client()
+        response = client.get('/api/statistics/reserved_tickets/regular/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual({tuple((k, v) for k, v in r.items()) for r in response.json()}, {tuple(r) for r in [
+            (('event_id', 1), ('type', 'regular'), ('quantity', 3)),
+        ]})
